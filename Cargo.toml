@@ -1,0 +1,17 @@
+[package]
+name = "mutual-gf"
+version = "0.1.0"
+authors = ["iliana destroyer of worlds <iliana@buttslol.net>"]
+license = "WTFPL"
+edition = "2018"
+publish = false
+
+[profile.release]
+lto = true
+
+[dependencies]
+bytes = "0.5"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+minreq = { version = "2", features = ["https", "json-using-serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_urlencoded = "0.6"
