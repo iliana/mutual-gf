@@ -12,6 +12,7 @@ lto = true
 [dependencies]
 bytes = "0.5"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
+esbat = "0.1"
 minreq = { version = "2", features = ["https", "json-using-serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_urlencoded = "0.6"
