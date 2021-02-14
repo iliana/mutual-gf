@@ -1,60 +1,62 @@
-// Copyright 2020 iliana destroyer of worlds <iliana@buttslol.net>
+// Copyright 2021 iliana destroyer of worlds <iliana@buttslol.net>
 // SPDX-License-Identifier: MIT-0
 
 #![deny(rust_2018_idioms)]
 #![warn(clippy::pedantic)]
 
 use bytes::{Buf, Bytes};
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, Utc};
 use minreq::{Method, Request};
 use serde::{Deserialize, Serialize};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> ! {
+    minlambda::run(handler)
+}
+
+fn handler(event: Event) -> Result<(), Box<dyn std::error::Error>> {
     let env = Env::from_env()?;
-    loop {
-        let response = env.lambda(Method::Get, "next").send_lazy()?;
-        let request_id = &response.headers["lambda-runtime-aws-request-id"];
-        let date = DateTime::parse_from_rfc2822(&response.headers["date"])?;
-        let date = date.with_timezone(&tz_offset(date.timestamp()));
-        println!("{:?}", date);
 
-        let moon = esbat::daily_lunar_phase(date.date()).as_emoji().to_string();
-        println!("{}", moon);
+    let date = event.time.with_timezone(&tz_offset(event.time.timestamp()));
+    println!("{:?}", date);
 
-        let moon_emoji = esbat::Phase::iter()
-            .map(|p| p.as_emoji())
-            .collect::<Vec<_>>();
+    let moon = esbat::daily_lunar_phase(date.date()).as_emoji().to_string();
+    println!("{}", moon);
 
-        let old_display_name = env
-            .masto(Method::Get, "accounts/verify_credentials")
-            .send()?
-            .json::<Profile>()?
-            .display_name;
-        println!("old display name: {}", old_display_name);
-        let display_name = old_display_name.replace(moon_emoji.as_slice(), &moon);
-        println!("new display name: {}", display_name);
-        if display_name != old_display_name {
-            let body = serde_urlencoded::to_string(Profile { display_name })?.into_bytes();
-            println!(
-                "accounts/update_credentials: {}",
-                env.masto(Method::Patch, "accounts/update_credentials")
-                    .with_body(body)
-                    .with_header("content-type", "application/x-www-form-urlencoded")
-                    .send_lazy()?
-                    .status_code
-            );
-        }
+    let moon_emoji = esbat::Phase::iter()
+        .map(|p| p.as_emoji())
+        .collect::<Vec<_>>();
 
-        env.lambda(Method::Post, &format!("{}/response", request_id))
-            .with_json(&())?
-            .send_lazy()?;
+    let old_display_name = env
+        .masto(Method::Get, "accounts/verify_credentials")
+        .send()?
+        .json::<Profile>()?
+        .display_name;
+    println!("old display name: {}", old_display_name);
+    let display_name = old_display_name.replace(moon_emoji.as_slice(), &moon);
+    println!("new display name: {}", display_name);
+    if display_name != old_display_name {
+        let body = serde_urlencoded::to_string(Profile { display_name })?.into_bytes();
+        println!(
+            "accounts/update_credentials: {}",
+            env.masto(Method::Patch, "accounts/update_credentials")
+                .with_body(body)
+                .with_header("content-type", "application/x-www-form-urlencoded")
+                .send_lazy()?
+                .status_code
+        );
     }
+
+    Ok(())
 }
 
 // =^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=
 
+#[derive(Deserialize, Clone, Copy)]
+struct Event {
+    time: DateTime<Utc>,
+}
+
 struct Env {
-    aws_lambda_runtime_api: String,
     masto_base: String,
     masto_access_token: String,
 }
@@ -62,20 +64,9 @@ struct Env {
 impl Env {
     fn from_env() -> Result<Env, std::env::VarError> {
         Ok(Env {
-            aws_lambda_runtime_api: std::env::var("AWS_LAMBDA_RUNTIME_API")?,
             masto_base: std::env::var("MASTO_BASE")?,
             masto_access_token: std::env::var("MASTO_ACCESS_TOKEN")?,
         })
-    }
-
-    fn lambda(&self, method: Method, path: &str) -> Request {
-        Request::new(
-            method,
-            format!(
-                "http://{}/2018-06-01/runtime/invocation/{}",
-                self.aws_lambda_runtime_api, path
-            ),
-        )
     }
 
     fn masto(&self, method: Method, path: &str) -> Request {
